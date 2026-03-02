@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Surface Set Cover</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap');
+:root{--bg:#050508;--surface:#0d0d14;--panel:#0a0a12;--border:#1e1e30;--accent:#e8ff00;--accent2:#ff3c5f;--accent3:#00ffc8;--accent4:#a259ff;--text:#c8c8e0;--muted:#44445a;--font-display:'Bebas Neue',sans-serif;--font-mono:'Space Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-height:100vh;overflow-x:hidden}
+header{padding:18px 28px 14px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:20px}
+header h1{font-family:var(--font-display);font-size:2.2rem;letter-spacing:.04em;color:var(--accent);line-height:1}
+header p{font-size:.6rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.layout{display:grid;grid-template-columns:1fr 300px;height:calc(100vh - 62px)}
+.viewports{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:var(--border);border-right:1px solid var(--border)}
+.viewport{background:var(--surface);position:relative;overflow:hidden}
+.vp-label{position:absolute;top:8px;left:10px;font-family:var(--font-display);font-size:.85rem;letter-spacing:.1em;z-index:10;pointer-events:none}
+.vp-label.u{color:var(--accent)}.vp-label.m1{color:var(--accent2)}.vp-label.m2{color:var(--accent4)}.vp-label.m3{color:var(--accent3)}
+.uv-badge{position:absolute;bottom:6px;right:8px;font-size:.52rem;color:var(--muted);z-index:10;pointer-events:none}
+.drop-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,8,.88);border:2px dashed var(--border);z-index:5;gap:8px;cursor:pointer;transition:all .2s}
+.drop-overlay.drag-over{border-color:var(--accent);background:rgba(232,255,0,.04)}
+.drop-overlay.hidden{display:none}
+.drop-icon{font-size:1.8rem;opacity:.4}
+.drop-text{font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.drop-name{font-family:var(--font-display);font-size:.9rem;letter-spacing:.1em}
+.drop-name.u{color:var(--accent)}.drop-name.m1{color:var(--accent2)}.drop-name.m2{color:var(--accent4)}.drop-name.m3{color:var(--accent3)}
+.file-input{display:none}
+.panel{background:var(--panel);overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:14px}
+.section-title{font-family:var(--font-display);font-size:.9rem;letter-spacing:.1em;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px}
+.ctrl-row{display:flex;align-items:center;gap:8px}
+.ctrl-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);flex:none;width:80px}
+.ctrl-val{color:var(--accent);font-size:.68rem;min-width:30px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--accent);height:2px}
+.run-btn{width:100%;padding:11px;background:var(--accent);color:#000;border:none;font-family:var(--font-display);font-size:1.1rem;letter-spacing:.15em;cursor:pointer;border-radius:2px;transition:opacity .15s}
+.run-btn:hover{opacity:.85}.run-btn:disabled{opacity:.3;cursor:not-allowed}
+.result-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.result-box{background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:8px 6px;text-align:center}
+.r-val{font-family:var(--font-display);font-size:1.5rem;line-height:1}
+.r-label{font-size:.5rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px}
+.c1{color:var(--accent2);border-color:rgba(255,60,95,.25)}.c2{color:var(--accent4);border-color:rgba(162,89,255,.25)}.c3{color:var(--accent3);border-color:rgba(0,255,200,.25)}
+.cbar-wrap{background:var(--bg);border:1px solid var(--border);border-radius:2px;overflow:hidden;height:18px;position:relative}
+.cbar{height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent));transition:width .6s ease;width:0%}
+.cbar-label{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.6rem;color:#fff;mix-blend-mode:difference}
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:8px;height:130px;overflow-y:auto;font-size:.56rem;line-height:1.7}
+.l-step{color:var(--text)}.l-info{color:var(--accent)}.l-warn{color:var(--accent2)}.l-ok{color:var(--accent3)}
+.model-status{display:flex;align-items:center;font-size:.58rem;color:var(--muted);padding:3px 0}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:7px;flex-none}
+.sdot.on{background:var(--accent3);box-shadow:0 0 5px var(--accent3)}
+.toggle-row{display:flex;gap:5px;flex-wrap:wrap}
+.tbtn{padding:3px 9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:.55rem;cursor:pointer;border-radius:2px;letter-spacing:.05em;transition:all .15s}
+.tbtn.on{border-color:var(--accent);color:var(--accent);background:rgba(232,255,0,.06)}
+.sep{border:none;border-top:1px solid var(--border)}
+.hint{font-size:.54rem;color:var(--muted);line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <h1>SURFACE SET COVER</h1>
+  <p>3D Parametric · UV Grid Sampling · Greedy Optimization · .OBJ / .STL</p>
+</header>
+<div class="layout">
+  <div class="viewports">
+    <div class="viewport" id="vp0">
+      <div class="vp-label u">U — UNIVERSE</div>
+      <div class="uv-badge" id="uvb0">—</div>
+      <div class="drop-overlay" id="drop0">
+        <div class="drop-icon">⬡</div>
+        <div class="drop-name u">UNIVERSE SURFACE</div>
+        <div class="drop-text">drop .obj / .stl · or click</div>
+      </div>
+      <input type="file" class="file-input" id="f0" accept=".obj,.stl">
+    </div>
+    <div class="viewport" id="vp1">
+      <div class="vp-label m1">M₁ — MODULE A</div>
+      <div class="uv-badge" id="uvb1">—</div>
+      <div class="drop-overlay" id="drop1">
+        <div class="drop-icon">◈</div>
+        <div class="drop-name m1">MODULE A</div>
+        <div class="drop-text">drop .obj / .stl · or click</div>
+      </div>
+      <input type="file" class="file-input" id="f1" accept=".obj,.stl">
+    </div>
+    <div class="viewport" id="vp2">
+      <div class="vp-label m2">M₂ — MODULE B</div>
+      <div class="uv-badge" id="uvb2">—</div>
+      <div class="drop-overlay" id="drop2">
+        <div class="drop-icon">◇</div>
+        <div class="drop-name m2">MODULE B</div>
+        <div class="drop-text">drop .obj / .stl · or click</div>
+      </div>
+      <input type="file" class="file-input" id="f2" accept=".obj,.stl">
+    </div>
+    <div class="viewport" id="vp3">
+      <div class="vp-label m3">M₃ — MODULE C</div>
+      <div class="uv-badge" id="uvb3">—</div>
+      <div class="drop-overlay" id="drop3">
+        <div class="drop-icon">△</div>
+        <div class="drop-name m3">MODULE C</div>
+        <div class="drop-text">drop .obj / .stl · or click</div>
+      </div>
+      <input type="file" class="file-input" id="f3" accept=".obj,.stl">
+    </div>
+  </div>
+
+  <div class="panel">
+    <div>
+      <div class="section-title">STATUS</div>
+      <div class="model-status"><span class="sdot" id="sd0"></span><span id="sn0">Universe — awaiting</span></div>
+      <div class="model-status"><span class="sdot" id="sd1"></span><span id="sn1">Module A — awaiting</span></div>
+      <div class="model-status"><span class="sdot" id="sd2"></span><span id="sn2">Module B — awaiting</span></div>
+      <div class="model-status"><span class="sdot" id="sd3"></span><span id="sn3">Module C — awaiting</span></div>
+    </div>
+    <hr class="sep">
+    <div>
+      <div class="section-title">UV SAMPLING</div>
+      <div class="ctrl-row"><span class="ctrl-label">U divisions</span><input type="range" id="uDiv" min="3" max="20" value="8"><span class="ctrl-val" id="uDivV">8</span></div>
+      <div class="ctrl-row"><span class="ctrl-label">V divisions</span><input type="range" id="vDiv" min="3" max="20" value="8"><span class="ctrl-val" id="vDivV">8</span></div>
+      <div class="ctrl-row"><span class="ctrl-label">Normal tol.</span><input type="range" id="ntol" min="5" max="90" value="40"><span class="ctrl-val" id="ntolV">40°</span></div>
+    </div>
+    <hr class="sep">
+    <div>
+      <div class="section-title">DISPLAY</div>
+      <div class="toggle-row">
+        <button class="tbtn on" id="twire" onclick="tog('wire')">Wireframe</button>
+        <button class="tbtn on" id="tuv" onclick="tog('uv')">UV Grid</button>
+        <button class="tbtn on" id="tnorm" onclick="tog('norm')">Normals</button>
+        <button class="tbtn" id="tcover" onclick="tog('cover')">Coverage</button>
+      </div>
+    </div>
+    <hr class="sep">
+    <button class="run-btn" onclick="runSetCover()">▶ SOLVE SET COVER</button>
+    <hr class="sep">
+    <div>
+      <div class="section-title">RESULTS</div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Coverage</div>
+        <div class="cbar-wrap"><div class="cbar" id="cbar"></div><span class="cbar-label" id="cpct">0%</span></div>
+      </div>
+      <div class="result-grid">
+        <div class="result-box c1"><div class="r-val" id="r0">—</div><div class="r-label">Mod A<br>used</div></div>
+        <div class="result-box c2"><div class="r-val" id="r1">—</div><div class="r-label">Mod B<br>used</div></div>
+        <div class="result-box c3"><div class="r-val" id="r2">—</div><div class="r-label">Mod C<br>used</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px">
+        <div class="result-box"><div class="r-val" style="color:var(--accent);font-size:1.2rem" id="rk">—</div><div class="r-label">k modules</div></div>
+        <div class="result-box"><div class="r-val" style="font-size:1.2rem" id="rp">—</div><div class="r-label">UV patches</div></div>
+      </div>
+    </div>
+    <hr class="sep">
+    <div>
+      <div class="section-title">LOG</div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+    <p class="hint">Drop <strong>.obj</strong> or <strong>.stl</strong> files.<br>Universe (top-left) is UV-sampled into patches.<br>Modules matched by surface normal proximity.<br>Greedy algorithm finds minimum k to cover U.</p>
+  </div>
+</div>
+
+<script>
+const COLORS=[0xe8ff00,0xff3c5f,0xa259ff,0x00ffc8];
+const scenes=[],cameras=[],renderers=[],meshes=[null,null,null,null],geoData=[null,null,null,null];
+let uvPatches=null,modPatches=[null,null,null];
+let vizState={wire:true,uv:true,norm:true,cover:false};
+let uvHelpers=[[],[],[],[]],normHelpers=[[],[],[],[]],coverHelpers=[];
+
+for(let i=0;i<4;i++){
+  const vp=document.getElementById('vp'+i);
+  const sc=new THREE.Scene(); sc.background=new THREE.Color(0x0a0a12); scenes.push(sc);
+  sc.add(new THREE.AmbientLight(0xffffff,0.45));
+  const dl=new THREE.DirectionalLight(0xffffff,0.75); dl.position.set(2,3,2); sc.add(dl);
+  const dl2=new THREE.DirectionalLight(COLORS[i],0.25); dl2.position.set(-2,-1,-2); sc.add(dl2);
+  const cam=new THREE.PerspectiveCamera(45,1,0.001,1000); cam.position.set(0,0,3); cameras.push(cam);
+  const ren=new THREE.WebGLRenderer({antialias:true}); ren.setPixelRatio(devicePixelRatio); vp.appendChild(ren.domElement); renderers.push(ren);
+  orbit(i,ren.domElement,cam);
+}
+
+function orbit(idx,el,cam){
+  let drag=false,px=0,py=0,th=0.4,ph=Math.PI/3,r=3;
+  function upd(){cam.position.set(r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph),r*Math.sin(ph)*Math.cos(th));cam.lookAt(0,0,0);}
+  upd();
+  el.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
+  window.addEventListener('mouseup',()=>drag=false);
+  window.addEventListener('mousemove',e=>{if(!drag)return;th-=(e.clientX-px)*0.008;ph=Math.max(0.1,Math.min(Math.PI-0.1,ph+(e.clientY-py)*0.008));px=e.clientX;py=e.clientY;upd();});
+  el.addEventListener('wheel',e=>{r=Math.max(0.3,Math.min(20,r+e.deltaY*0.005));upd();e.preventDefault();},{passive:false});
+}
+
+function resz(){for(let i=0;i<4;i++){const vp=document.getElementById('vp'+i);const w=vp.clientWidth,h=vp.clientHeight;cameras[i].aspect=w/h;cameras[i].updateProjectionMatrix();renderers[i].setSize(w,h);}}
+window.addEventListener('resize',resz); resz();
+(function anim(){requestAnimationFrame(anim);for(let i=0;i<4;i++)renderers[i].render(scenes[i],cameras[i]);})();
+
+// ── OBJ Parser ──
+function parseOBJ(txt){
+  const pos=[],nrm=[],uvr=[];const vt=[],nt=[],uvt=[];
+  for(const line of txt.split('\n')){
+    const p=line.trim().split(/\s+/);
+    if(p[0]==='v')pos.push([+p[1],+p[2],+p[3]]);
+    else if(p[0]==='vn')nrm.push([+p[1],+p[2],+p[3]]);
+    else if(p[0]==='vt')uvr.push([+p[1],+p[2]]);
+    else if(p[0]==='f'){
+      const face=p.slice(1).map(x=>x.split('/').map(v=>parseInt(v)-1));
+      for(let j=1;j<face.length-1;j++)for(const fi of[face[0],face[j],face[j+1]]){
+        vt.push(...pos[fi[0]]);
+        uvt.push(...(uvr[fi[1]]||[0,0]));
+        nt.push(...(nrm[fi[2]]||[0,1,0]));
+      }
+    }
+  }
+  return mkGeo(vt,nt,uvt);
+}
+
+// ── STL Parser ──
+function parseSTL(buf){
+  const vt=[],nt=[];const dv=new DataView(buf);
+  const tc=dv.getUint32(80,true);
+  if(tc*50+84<=buf.byteLength){
+    let off=84;
+    for(let i=0;i<tc;i++){
+      const nx=dv.getFloat32(off,true),ny=dv.getFloat32(off+4,true),nz=dv.getFloat32(off+8,true);off+=12;
+      for(let j=0;j<3;j++){vt.push(dv.getFloat32(off,true),dv.getFloat32(off+4,true),dv.getFloat32(off+8,true));nt.push(nx,ny,nz);off+=12;}
+      off+=2;
+    }
+  } else {
+    const txt=new TextDecoder().decode(buf);let cx=0,cy=0,cz=0;
+    for(const l of txt.split('\n')){const p=l.trim().split(/\s+/);
+      if(p[0]==='facet'&&p[1]==='normal'){cx=+p[2];cy=+p[3];cz=+p[4];}
+      else if(p[0]==='vertex'){vt.push(+p[1],+p[2],+p[3]);nt.push(cx,cy,cz);}
+    }
+  }
+  return mkGeo(vt,nt,new Array(vt.length/3*2).fill(0));
+}
+
+function mkGeo(vt,nt,uv){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(vt,3));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(nt.length===vt.length?nt:new Array(vt.length).fill(0),3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.computeVertexNormals();g.computeBoundingSphere();return g;
+}
+
+function loadModel(idx,geo,name){
+  geo.computeBoundingBox();
+  const box=geo.boundingBox,c=new THREE.Vector3(),sz=new THREE.Vector3();
+  box.getCenter(c);box.getSize(sz);
+  const sc=2.0/Math.max(sz.x,sz.y,sz.z);
+  geo.translate(-c.x,-c.y,-c.z);geo.scale(sc,sc,sc);geo.computeVertexNormals();geo.computeBoundingSphere();
+  if(meshes[idx]){scenes[idx].remove(meshes[idx]);}
+  clearH(idx);
+  const mat=new THREE.MeshPhongMaterial({color:COLORS[idx],transparent:true,opacity:0.72,side:THREE.DoubleSide,wireframe:vizState.wire});
+  const m=new THREE.Mesh(geo,mat); scenes[idx].add(m); meshes[idx]=m; geoData[idx]=geo;
+  document.getElementById('drop'+idx).classList.add('hidden');
+  document.getElementById('sd'+idx).className='sdot on';
+  document.getElementById('sn'+idx).textContent=(idx===0?'Universe':'Module '+String.fromCharCode(64+idx))+' — '+name+' ✓';
+  computeUV(idx);
+  log('l-ok',`Loaded: ${name} [${Math.round(geo.attributes.position.count/3)} tris]`);
+}
+
+// ── UV Sampling ──
+function computeUV(idx){
+  const geo=geoData[idx]; if(!geo)return;
+  const uD=+document.getElementById('uDiv').value, vD=+document.getElementById('vDiv').value;
+  const pos=geo.attributes.position, nor=geo.attributes.normal;
+  const faces=[];
+  for(let i=0;i<pos.count;i+=3){
+    const p0=new THREE.Vector3(pos.getX(i),pos.getY(i),pos.getZ(i));
+    const p1=new THREE.Vector3(pos.getX(i+1),pos.getY(i+1),pos.getZ(i+1));
+    const p2=new THREE.Vector3(pos.getX(i+2),pos.getY(i+2),pos.getZ(i+2));
+    const cen=p0.clone().add(p1).add(p2).divideScalar(3);
+    const n0=new THREE.Vector3(nor.getX(i),nor.getY(i),nor.getZ(i));
+    const n1=new THREE.Vector3(nor.getX(i+1),nor.getY(i+1),nor.getZ(i+1));
+    const n2=new THREE.Vector3(nor.getX(i+2),nor.getY(i+2),nor.getZ(i+2));
+    const avgN=n0.add(n1).add(n2).normalize();
+    const nv=new THREE.Vector3(nor.getX(i),nor.getY(i),nor.getZ(i));
+    const nw=new THREE.Vector3(nor.getX(i+2),nor.getY(i+2),nor.getZ(i+2));
+    faces.push({centroid:cen,normal:avgN,curvature:nv.angleTo(nw)});
+  }
+  const bbox=new THREE.Box3(); for(const f of faces)bbox.expandByPoint(f.centroid);
+  const bsz=new THREE.Vector3(),bmin=bbox.min; bbox.getSize(bsz);
+  const patches={};
+  for(const f of faces){
+    const u=Math.min(uD-1,Math.floor(((f.centroid.x-bmin.x)/(bsz.x||1))*uD));
+    const v=Math.min(vD-1,Math.floor(((f.centroid.y-bmin.y)/(bsz.y||1))*vD));
+    const k=`${u}_${v}`;
+    if(!patches[k])patches[k]={u,v,faces:[],normal:new THREE.Vector3(),curvature:0,centroid:new THREE.Vector3(),id:k};
+    const p=patches[k]; p.faces.push(f); p.normal.add(f.normal); p.curvature+=f.curvature; p.centroid.add(f.centroid);
+  }
+  const pl=Object.values(patches);
+  for(const p of pl){const n=p.faces.length;p.normal.normalize();p.curvature/=n;p.centroid.divideScalar(n);}
+  document.getElementById('uvb'+idx).textContent=pl.length+' patches';
+  if(idx===0)uvPatches=pl; else modPatches[idx-1]=pl;
+  if(vizState.uv)drawUVHelpers(idx,pl);
+  log('l-info',`UV [${uD}×${vD}]: ${pl.length} patches on ${idx===0?'U':'M'+idx}`);
+}
+
+function clearH(idx){
+  for(const h of uvHelpers[idx])scenes[idx].remove(h); uvHelpers[idx]=[];
+  for(const h of normHelpers[idx])scenes[idx].remove(h); normHelpers[idx]=[];
+}
+
+function drawUVHelpers(idx,pl){
+  clearH(idx);
+  const lm=new THREE.LineBasicMaterial({color:COLORS[idx],transparent:true,opacity:0.35});
+  const nm=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.18});
+  for(const p of pl){
+    const s=0.022;
+    const g=new THREE.BufferGeometry().setFromPoints([
+      p.centroid.clone().add(new THREE.Vector3(-s,0,0)),
+      p.centroid.clone().add(new THREE.Vector3(s,0,0)),
+      p.centroid.clone().add(new THREE.Vector3(0,-s,0)),
+      p.centroid.clone().add(new THREE.Vector3(0,s,0)),
+    ]);
+    const ls=new THREE.LineSegments(g,lm); scenes[idx].add(ls); uvHelpers[idx].push(ls);
+    if(vizState.norm){
+      const end=p.centroid.clone().add(p.normal.clone().multiplyScalar(0.07));
+      const ng=new THREE.BufferGeometry().setFromPoints([p.centroid.clone(),end]);
+      const nl=new THREE.Line(ng,nm); scenes[idx].add(nl); normHelpers[idx].push(nl);
+    }
+  }
+}
+
+// ── Greedy Set Cover ──
+function runSetCover(){
+  if(!uvPatches){log('l-warn','Load Universe first!');return;}
+  const loaded=modPatches.filter(x=>x);
+  if(!loaded.length){log('l-warn','Load at least one module!');return;}
+  const tol=+document.getElementById('ntol').value*(Math.PI/180);
+  log('l-info',`▶ Set Cover | |U|=${uvPatches.length} | modules: ${modPatches.filter(x=>x).length} types | tol: ${document.getElementById('ntol').value}°`);
+  const U=new Set(uvPatches.map(p=>p.id));
+  const subsets=[];
+  for(let mi=0;mi<3;mi++){
+    const mp=modPatches[mi]; if(!mp)continue;
+    for(let pi=0;pi<mp.length;pi++){
+      const m=mp[pi],cov=new Set();
+      for(const up of uvPatches){
+        if(m.normal.angleTo(up.normal)<tol)cov.add(up.id);
+      }
+      if(cov.size>0)subsets.push({mi,pi,cov});
+    }
+  }
+  log('l-step',`Generated ${subsets.length} compatible subsets`);
+  if(!subsets.length){log('l-warn','No compatible patches — increase normal tolerance');return;}
+  const uncov=new Set(U),sel=[],cnt=[0,0,0];
+  const t0=performance.now();
+  while(uncov.size>0){
+    let best=-1,bg=0;
+    for(let si=0;si<subsets.length;si++){
+      if(sel.includes(si))continue;
+      let g=0; for(const v of subsets[si].cov)if(uncov.has(v))g++;
+      if(g>bg){bg=g;best=si;}
+    }
+    if(best===-1||bg===0){log('l-warn',`Stalled: ${uncov.size} patches uncoverable`);break;}
+    sel.push(best);
+    const s=subsets[best]; cnt[s.mi]++;
+    for(const v of s.cov)uncov.delete(v);
+    log('l-step',`→ Mod${s.mi+1}·p${s.pi}: +${bg} covered (${uncov.size} remain)`);
+  }
+  const elapsed=performance.now()-t0;
+  const cov=((U.size-uncov.size)/U.size*100).toFixed(1);
+  document.getElementById('r0').textContent=cnt[0];
+  document.getElementById('r1').textContent=cnt[1];
+  document.getElementById('r2').textContent=cnt[2];
+  document.getElementById('rk').textContent=sel.length;
+  document.getElementById('rp').textContent=uvPatches.length;
+  document.getElementById('cbar').style.width=cov+'%';
+  document.getElementById('cpct').textContent=cov+'%';
+  log('l-ok',`✓ k=${sel.length} modules | ${cov}% coverage | ${elapsed.toFixed(1)}ms`);
+  showCoverage(sel,subsets);
+}
+
+function showCoverage(sel,subsets){
+  for(const h of coverHelpers)scenes[0].remove(h); coverHelpers=[];
+  const pCol={};
+  for(const si of sel){const s=subsets[si];for(const id of s.cov)pCol[id]=COLORS[s.mi+1];}
+  for(const up of uvPatches){
+    const g=new THREE.SphereGeometry(0.022,4,4);
+    const m=new THREE.MeshBasicMaterial({color:pCol[up.id]||0x222233});
+    const sp=new THREE.Mesh(g,m); sp.position.copy(up.centroid);
+    scenes[0].add(sp); coverHelpers.push(sp);
+  }
+}
+
+// ── File handling ──
+for(let i=0;i<4;i++){
+  const vp=document.getElementById('vp'+i),drop=document.getElementById('drop'+i),fi=document.getElementById('f'+i);
+  drop.addEventListener('click',()=>fi.click());
+  vp.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag-over');});
+  vp.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));
+  vp.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)handle(i,f);});
+  fi.addEventListener('change',e=>{const f=e.target.files[0];if(f)handle(i,f);fi.value='';});
+}
+
+function handle(idx,file){
+  const n=file.name.toLowerCase(),r=new FileReader();
+  if(n.endsWith('.obj')){r.onload=e=>{try{loadModel(idx,parseOBJ(e.target.result),file.name);}catch(err){log('l-warn','OBJ error: '+err.message);}};r.readAsText(file);}
+  else if(n.endsWith('.stl')){r.onload=e=>{try{loadModel(idx,parseSTL(e.target.result),file.name);}catch(err){log('l-warn','STL error: '+err.message);}};r.readAsArrayBuffer(file);}
+  else log('l-warn','Use .obj or .stl files');
+}
+
+// ── Controls ──
+document.getElementById('uDiv').oninput=e=>{document.getElementById('uDivV').textContent=e.target.value;recompAll();};
+document.getElementById('vDiv').oninput=e=>{document.getElementById('vDivV').textContent=e.target.value;recompAll();};
+document.getElementById('ntol').oninput=e=>document.getElementById('ntolV').textContent=e.target.value+'°';
+function recompAll(){for(let i=0;i<4;i++)if(geoData[i])computeUV(i);}
+
+function tog(type){
+  vizState[type]=!vizState[type];
+  document.getElementById('t'+type).classList.toggle('on',vizState[type]);
+  if(type==='wire')for(let i=0;i<4;i++)if(meshes[i])meshes[i].material.wireframe=vizState.wire;
+  if(type==='uv'||type==='norm')recompAll();
+}
+
+function log(cls,msg){
+  const b=document.getElementById('logBox'),d=document.createElement('div');
+  d.className=cls;d.textContent='› '+msg;b.appendChild(d);b.scrollTop=b.scrollHeight;
+}
+
+log('l-info','Ready — drag .obj or .stl onto any viewport');
+log('l-step','Top-left = Universe U · Others = Modules A / B / C');
+</script>
+</body>
+</html>

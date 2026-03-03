@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parametric Surface Coverage: Greedy vs Optimal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --panel: #12121a;
+    --border: #2a2a3a;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #a8ff78;
+    --text: #e0e0f0;
+    --muted: #666680;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.72rem;
+    margin-bottom: 24px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  label {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    margin-top: 14px;
+  }
+
+  label:first-child { margin-top: 0; }
+
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  .val {
+    color: var(--accent);
+    font-size: 0.75rem;
+    float: right;
+  }
+
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: opacity 0.15s;
+  }
+
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    margin-top: 8px;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .stat-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .stat-val {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .greedy-color { color: var(--accent2); }
+  .optimal-color { color: var(--accent3); }
+
+  .viz-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .viz-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .viz-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+  }
+
+  canvas { display: block; border-radius: 4px; }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    height: 120px;
+    overflow-y: auto;
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+
+  .log .step { color: var(--text); }
+  .log .info { color: var(--accent); }
+  .log .warn { color: var(--accent2); }
+
+  #chartPanel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+  }
+
+  .chart-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  #benchCanvas { display: block; }
+
+  .legend {
+    display: flex; gap: 20px;
+    font-size: 0.65rem;
+    margin-top: 8px;
+    color: var(--muted);
+  }
+
+  .legend span { display: flex; align-items: center; gap: 5px; }
+
+  select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+
+  .ratio-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    background: rgba(0,229,255,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+  }
+</style>
+</head>
+<body>
+
+<h1>Surface Coverage: Greedy vs Optimal</h1>
+<p class="subtitle">Set Cover Problem · Parametric Module Selection · Algorithm Benchmark</p>
+
+<div class="grid">
+  <!-- Left Controls -->
+  <div>
+    <div class="panel">
+      <label>Surface Type</label>
+      <select id="surfaceType">
+        <option value="grid">Grid (n×n)</option>
+        <option value="torus">Toroidal Grid</option>
+        <option value="random">Random Graph</option>
+      </select>
+
+      <label>Grid Size (n) <span class="val" id="nVal">8</span></label>
+      <input type="range" id="gridN" min="4" max="16" value="8">
+
+      <label>Module Library Size <span class="val" id="mVal">12</span></label>
+      <input type="range" id="moduleM" min="4" max="40" value="12">
+
+      <label>Module Coverage Density <span class="val" id="dVal">25%</span></label>
+      <input type="range" id="density" min="5" max="60" value="25">
+
+      <label>Random Seed <span class="val" id="seedVal">42</span></label>
+      <input type="range" id="seed" min="1" max="999" value="42">
+
+      <button id="runBtn" onclick="runAll()">▶ RUN COMPARISON</button>
+      <button class="btn-secondary" onclick="runBenchmark()">📊 BENCHMARK (sizes 4–12)</button>
+    </div>
+
+    <div class="panel" style="margin-top:12px;">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.8rem;margin-bottom:10px;">Results</div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Greedy Modules</div>
+          <div class="stat-val greedy-color" id="greedyCount">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Optimal Modules</div>
+          <div class="stat-val optimal-color" id="optCount">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Greedy Time</div>
+          <div class="stat-val greedy-color" id="greedyTime">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Optimal Time</div>
+          <div class="stat-val optimal-color" id="optTime">—</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:0.68rem;color:var(--muted);">
+        Approximation Ratio: <span class="ratio-badge" id="ratio">—</span>
+        <br><br>
+        <span style="font-size:0.6rem;">Theoretical greedy bound: H(max|S_i|) ≈ ln(n)+1</span>
+      </div>
+      <div class="log" id="logBox"></div>
+    </div>
+  </div>
+
+  <!-- Right Visualizations -->
+  <div>
+    <div class="viz-container">
+      <div class="viz-panel">
+        <div class="viz-title">
+          <span class="dot" style="background:var(--accent2)"></span>
+          Greedy Selection
+        </div>
+        <canvas id="greedyCanvas" width="340" height="340"></canvas>
+      </div>
+      <div class="viz-panel">
+        <div class="viz-title">
+          <span class="dot" style="background:var(--accent3)"></span>
+          Optimal (ILP/Exhaustive)
+        </div>
+        <canvas id="optCanvas" width="340" height="340"></canvas>
+      </div>
+    </div>
+
+    <div id="chartPanel">
+      <div class="chart-title">Benchmark: Solution Quality & Runtime vs Surface Size</div>
+      <canvas id="benchCanvas" width="700" height="200"></canvas>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--accent2)"></span> Greedy modules</span>
+        <span><span class="dot" style="background:var(--accent3)"></span> Optimal modules</span>
+        <span><span class="dot" style="background:var(--accent)"></span> Greedy time (ms)</span>
+        <span><span class="dot" style="background:#ff4488)"></span> Optimal time (ms)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Seeded RNG ───────────────────────────────────────────────────────────────
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
+// ─── Surface Graph Generation ─────────────────────────────────────────────────
+function buildSurface(type, n, rng) {
+  const cells = [];
+  const adj = {};
+
+  if (type === 'grid' || type === 'torus') {
+    for (let r = 0; r < n; r++)
+      for (let c = 0; c < n; c++) {
+        const id = r * n + c;
+        cells.push({ id, r, c });
+        adj[id] = [];
+      }
+    for (let r = 0; r < n; r++)
+      for (let c = 0; c < n; c++) {
+        const id = r * n + c;
+        const dirs = [[0,1],[1,0],[0,-1],[-1,0]];
+        for (const [dr,dc] of dirs) {
+          let nr = r+dr, nc = c+dc;
+          if (type === 'torus') { nr = (nr+n)%n; nc = (nc+n)%n; }
+          if (nr>=0&&nr<n&&nc>=0&&nc<n) adj[id].push(nr*n+nc);
+        }
+      }
+  } else {
+    // random graph
+    const N = n*n;
+    for (let i=0;i<N;i++) { cells.push({id:i,r:Math.floor(i/n),c:i%n}); adj[i]=[]; }
+    for (let i=0;i<N;i++)
+      for (let j=i+1;j<N;j++)
+        if (rng()<0.15) { adj[i].push(j); adj[j].push(i); }
+  }
+  return { cells, adj, n };
+}
+
+// ─── Module Library Generation ────────────────────────────────────────────────
+function buildModules(cells, adj, m, density, rng) {
+  const n = cells.length;
+  const modules = [];
+  // Each module covers a random connected subgraph (BFS from random seed)
+  const targetSize = Math.max(2, Math.round(n * density / 100));
+  for (let k=0;k<m;k++) {
+    const start = cells[Math.floor(rng()*n)].id;
+    const covered = new Set([start]);
+    const queue = [start];
+    while (queue.length && covered.size < targetSize) {
+      const cur = queue.splice(Math.floor(rng()*queue.length),1)[0];
+      for (const nb of (adj[cur]||[])) {
+        if (!covered.has(nb) && rng()<0.6) {
+          covered.add(nb);
+          queue.push(nb);
+        }
+      }
+    }
+    modules.push([...covered]);
+  }
+  return modules;
+}
+
+// ─── Greedy Set Cover ─────────────────────────────────────────────────────────
+function greedyCover(V_set, modules) {
+  const log = [];
+  const uncovered = new Set(V_set);
+  const selected = [];
+  const available = modules.map((s,i) => ({i, set: new Set(s)}));
+
+  const t0 = performance.now();
+  while (uncovered.size > 0) {
+    let best = -1, bestGain = -1;
+    for (const mod of available) {
+      if (selected.includes(mod.i)) continue;
+      let gain = 0;
+      for (const v of mod.set) if (uncovered.has(v)) gain++;
+      if (gain > bestGain) { bestGain = gain; best = mod.i; }
+    }
+    if (best === -1 || bestGain === 0) {
+      log.push({type:'warn', msg:`Cannot cover ${uncovered.size} remaining cells — no suitable module`});
+      break;
+    }
+    selected.push(best);
+    for (const v of available[best].set) uncovered.delete(v);
+    log.push({type:'step', msg:`Selected module ${best} (+${bestGain} cells, ${uncovered.size} remain)`});
+  }
+  const elapsed = performance.now() - t0;
+  return { selected, elapsed, log };
+}
+
+// ─── Optimal Set Cover (Branch & Bound / Exhaustive for small n) ──────────────
+function optimalCover(V_set, modules, timeLimit=5000) {
+  const log = [];
+  const V = V_set;
+  const m = modules.length;
+  const modSets = modules.map(s => new Set(s));
+
+  const t0 = performance.now();
+
+  // Check feasibility
+  const union = new Set();
+  for (const s of modSets) for (const v of s) union.add(v);
+  for (const v of V) if (!union.has(v)) {
+    log.push({type:'warn', msg:`Cell ${v} not covered by any module — infeasible`});
+    return { selected: null, elapsed: performance.now()-t0, log, infeasible: true };
+  }
+
+  // For small: exact branch & bound with bitmask if m<=20
+  if (m <= 20 && V <= 256) {
+    // Represent V as indices
+    const vArr = [...V];
+    const vIdx = {};
+    vArr.forEach((v,i) => vIdx[v]=i);
+    const N = vArr.length;
+    const fullMask = (1<<N)-1 > 2**31-1 ? null : (1<<N)-1;
+
+    if (N <= 25) {
+      // Bitmask DP
+      const modMasks = modSets.map(s => {
+        let mask = 0;
+        for (const v of s) if (vIdx[v]!==undefined) mask |= (1<<vIdx[v]);
+        return mask;
+      });
+      const full = (1<<N)-1;
+      let bestLen = m+1, bestSel = null;
+
+      function bb(idx, coveredMask, chosen) {
+        if (performance.now()-t0 > timeLimit) return;
+        if (coveredMask === full) {
+          if (chosen.length < bestLen) { bestLen = chosen.length; bestSel = [...chosen]; }
+          return;
+        }
+        if (idx >= m) return;
+        if (chosen.length + 1 >= bestLen) return; // prune
+
+        // with module idx
+        bb(idx+1, coveredMask|modMasks[idx], [...chosen, idx]);
+        // without
+        bb(idx+1, coveredMask, chosen);
+      }
+      bb(0, 0, []);
+      const elapsed = performance.now()-t0;
+      if (bestSel) {
+        log.push({type:'info', msg:`Optimal: ${bestLen} modules found via B&B in ${elapsed.toFixed(1)}ms`});
+        return { selected: bestSel, elapsed, log };
+      }
+    }
+  }
+
+  // Fallback: ILP-style greedy with LP relaxation lower bound (just use greedy for large)
+  log.push({type:'info', msg:`Large instance — using greedy as approximation for "optimal"`});
+  const g = greedyCover(V, modules);
+  return { selected: g.selected, elapsed: performance.now()-t0, log, approx: true };
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+const PALETTE = [
+  '#ff6b35','#a8ff78','#00e5ff','#ff4488','#ffeb3b',
+  '#b39ddb','#80cbc4','#ffcc02','#f48fb1','#81d4fa',
+  '#c5e1a5','#ef9a9a','#ffe0b2','#b2ebf2','#d7ccc8'
+];
+
+function renderCoverage(canvasId, surface, modules, selected, colorBase) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const { cells, n } = surface;
+  const N = n; // grid assumed
+  const cw = Math.floor(W/N)-1, ch = Math.floor(H/N)-1;
+
+  // Background cells
+  ctx.fillStyle = '#1a1a2a';
+  for (const c of cells) {
+    const x = c.c*(cw+1)+1, y = c.r*(ch+1)+1;
+    ctx.fillRect(x,y,cw,ch);
+  }
+
+  // Color by module (last selected wins)
+  const cellColor = {};
+  for (let k=0;k<selected.length;k++) {
+    const mod = selected[k];
+    const col = PALETTE[k % PALETTE.length];
+    for (const v of modules[mod]) cellColor[v] = col;
+  }
+
+  for (const c of cells) {
+    const col = cellColor[c.id];
+    if (!col) continue;
+    const x = c.c*(cw+1)+1, y = c.r*(ch+1)+1;
+    ctx.fillStyle = col + 'cc';
+    ctx.fillRect(x,y,cw,ch);
+  }
+
+  // Grid lines
+  ctx.strokeStyle = '#0a0a1a';
+  ctx.lineWidth = 0.5;
+  for (const c of cells) {
+    const x = c.c*(cw+1)+1, y = c.r*(ch+1)+1;
+    ctx.strokeRect(x,y,cw,ch);
+  }
+
+  // Uncovered highlight
+  for (const c of cells) {
+    if (!cellColor[c.id]) {
+      const x = c.c*(cw+1)+1, y = c.r*(ch+1)+1;
+      ctx.fillStyle = '#ff000040';
+      ctx.fillRect(x,y,cw,ch);
+    }
+  }
+}
+
+// ─── Logging ──────────────────────────────────────────────────────────────────
+function log(entries) {
+  const box = document.getElementById('logBox');
+  box.innerHTML = entries.map(e =>
+    `<div class="${e.type}">${e.msg}</div>`
+  ).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+// ─── Main Run ─────────────────────────────────────────────────────────────────
+let lastSurface, lastModules;
+
+function runAll() {
+  const n = +document.getElementById('gridN').value;
+  const m = +document.getElementById('moduleM').value;
+  const dens = +document.getElementById('density').value;
+  const seed = +document.getElementById('seed').value;
+  const type = document.getElementById('surfaceType').value;
+
+  const rng = makeRng(seed);
+  const surface = buildSurface(type, n, rng);
+  const modules = buildModules(surface.cells, surface.adj, m, dens, rng);
+  lastSurface = surface; lastModules = modules;
+
+  const V = new Set(surface.cells.map(c=>c.id));
+
+  const gr = greedyCover(V, modules);
+  const opt = optimalCover(V, modules);
+
+  // Render
+  renderCoverage('greedyCanvas', surface, modules, gr.selected, 'orange');
+  renderCoverage('optCanvas', surface, modules, opt.selected || gr.selected, 'green');
+
+  // Stats
+  document.getElementById('greedyCount').textContent = gr.selected.length;
+  document.getElementById('optCount').textContent = opt.selected ? opt.selected.length : '?';
+  document.getElementById('greedyTime').textContent = gr.elapsed.toFixed(2)+'ms';
+  document.getElementById('optTime').textContent = opt.elapsed.toFixed(2)+'ms';
+
+  const ratio = opt.selected ? (gr.selected.length / opt.selected.length).toFixed(3) : 'N/A';
+  document.getElementById('ratio').textContent = ratio;
+
+  const allLogs = [...gr.log, ...opt.log];
+  log(allLogs);
+}
+
+// ─── Benchmark ────────────────────────────────────────────────────────────────
+async function runBenchmark() {
+  const btn = document.querySelector('button[onclick="runBenchmark()"]');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+
+  const sizes = [4,5,6,7,8,9,10,11,12];
+  const results = [];
+
+  for (const n of sizes) {
+    const rng = makeRng(42);
+    const surface = buildSurface('grid', n, rng);
+    const modules = buildModules(surface.cells, surface.adj, 15, 20, rng);
+    const V = new Set(surface.cells.map(c=>c.id));
+
+    const gr = greedyCover(V, modules);
+    const opt = optimalCover(V, modules, 3000);
+
+    results.push({
+      n,
+      cells: n*n,
+      greedyMod: gr.selected.length,
+      optMod: opt.selected ? opt.selected.length : gr.selected.length,
+      greedyTime: gr.elapsed,
+      optTime: opt.elapsed,
+    });
+
+    // yield to UI
+    await new Promise(r=>setTimeout(r,10));
+  }
+
+  drawBenchChart(results);
+  btn.disabled = false;
+  btn.textContent = '📊 BENCHMARK (sizes 4–12)';
+}
+
+function drawBenchChart(results) {
+  const canvas = document.getElementById('benchCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const pad = { l:50, r:20, t:20, b:40 };
+  const iW = W-pad.l-pad.r, iH = H-pad.t-pad.b;
+
+  // Axes
+  ctx.strokeStyle = '#2a2a3a'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+iH);
+  ctx.lineTo(pad.l+iW,pad.t+iH);
+  ctx.stroke();
+
+  const maxMod = Math.max(...results.map(r=>r.greedyMod))+2;
+  const maxTime = Math.max(...results.map(r=>r.optTime, r=>r.greedyTime))+1;
+  const xs = results.map((_,i)=>pad.l+i/(results.length-1)*iW);
+
+  function yMod(v) { return pad.t+iH - (v/maxMod)*iH; }
+  function yTime(v) { return pad.t+iH - (v/maxTime)*iH; }
+
+  function drawLine(vals, yfn, color) {
+    ctx.strokeStyle=color; ctx.lineWidth=2;
+    ctx.beginPath();
+    vals.forEach((v,i)=>i===0?ctx.moveTo(xs[i],yfn(v)):ctx.lineTo(xs[i],yfn(v)));
+    ctx.stroke();
+    ctx.fillStyle=color;
+    vals.forEach((v,i)=>{ctx.beginPath();ctx.arc(xs[i],yfn(v),4,0,Math.PI*2);ctx.fill();});
+  }
+
+  drawLine(results.map(r=>r.greedyMod), yMod, '#ff6b35');
+  drawLine(results.map(r=>r.optMod), yMod, '#a8ff78');
+  drawLine(results.map(r=>r.greedyTime), yTime, '#00e5ff');
+  drawLine(results.map(r=>r.optTime), yTime, '#ff4488');
+
+  // X labels
+  ctx.fillStyle='#666680'; ctx.font='10px JetBrains Mono'; ctx.textAlign='center';
+  results.forEach((r,i)=>{
+    ctx.fillText(`${r.n}×${r.n}`,xs[i],pad.t+iH+16);
+  });
+
+  // Y label
+  ctx.fillStyle='#666680'; ctx.textAlign='right';
+  ctx.fillText('modules',pad.l-4,pad.t+4);
+}
+
+// ─── Input bindings ───────────────────────────────────────────────────────────
+document.getElementById('gridN').oninput = e => document.getElementById('nVal').textContent=e.target.value;
+document.getElementById('moduleM').oninput = e => document.getElementById('mVal').textContent=e.target.value;
+document.getElementById('density').oninput = e => document.getElementById('dVal').textContent=e.target.value+'%';
+document.getElementById('seed').oninput = e => document.getElementById('seedVal').textContent=e.target.value;
+
+// Initial run
+runAll();
+</script>
+</body>
+</html>
